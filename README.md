@@ -107,8 +107,6 @@ Day 1 introduces goods and change; Day 2 adds TindaPay; Day 3 adds weighing; Day
 | Tab / Enter | Select / activate a button |
 | Escape | Close an open dialog or toggle pause |
 
-See [the complete player guide](docs/controls.md) for detailed controls and transaction handling.
-
 ## Progress and saved games
 
 The download includes **no personal player progress**. A fresh copy starts a new shop and creates its own saves.
@@ -123,15 +121,4 @@ Save with **Save shop** when no transaction is active. Completed reports and suc
 - **No Continue option on a fresh download:** this is expected when no checkpoint exists yet.
 - **No sound:** the current version has no connected audio playback.
 
-## For students and developers
 
-The source separates game data, rules, commands, screens and UI. Prepared images are included in assets/img; original editable artwork, old builds and personal saves are excluded from this download. Money uses integer centavos, and saves contain game data rather than an SQL database.
-
-See [architecture](docs/ARCHITECTURE.md) and [GitHub upload instructions](docs/GITHUB.md). With the installed runtime, developers can run these commands from the complete source folder:
-
-```powershell
-& 'C:\Program Files\LOVE\lovec.exe' . --test
-& 'C:\Program Files\LOVE\lovec.exe' . --smoke
-```
-
-Smoke checks generate screenshots for inspection. They supplement automated tests; they do not replace a full human playthrough.
