@@ -1,0 +1,42 @@
+-- Purpose: retail integrity regression suite. API: returned test function. Dependencies: real domain modules.
+return function()
+ local ok, I=pcall(require,'src.systems.inventory'); assert(ok,'inventory system must exist: '..tostring(I))
+ local C=require('src.systems.cash'); local R=require('src.systems.retail'); local E=require('src.systems.economy'); local P=require('src.systems.reputation'); local Cmd=require('src.commands'); local S=require('src.model.state')
+ local s=S.new(1); local baseline=S.clone(s)
+ assert(I.available(s,'candy')==30 and s.reservations==nil,'queries must not initialize')
+ assert(not I.reserve(s,'bad','candy',0)); assert(not I.reserve(s,'bad','candy',1.5)); assert(not I.reserve(s,'bad','candy',0/0))
+ assert(I.reserve(s,'a','candy',29)); assert(not I.reserve(s,'b','candy',2)); assert(I.release(s,'a')); assert(I.available(s,'candy')==30)
+ s.inventory.candy={{id='x',quantity=3,totalCost=10,receivedDay=1,expiresDay=10,prepared=false},{id='y',quantity=2,totalCost=9,receivedDay=1,expiresDay=10,prepared=false}}
+ local cost=0; for n=1,5 do assert(I.reserve(s,'r'..n,'candy',1)); local success,used=I.consume(s,'r'..n); assert(success); cost=cost+used end; assert(cost==19 and I.available(s,'candy')==0,'FIFO conserves partial cost')
+ s=S.new(2); s.phase='service'; local cash=C.total(s)
+ assert(R.begin(s,'sale1')); assert(R.add(s,'sale1','candy',2)); s.prices.candy=900; assert(R.quote(s,'sale1').total==200,'quote frozen')
+ assert(not R.add(s,'sale1','candy',-1)); assert(not R.stageTender(s,'sale1',{[3]=1})); assert(not R.stageTender(s,'sale1',{[100]=1.5})); assert(not R.stageTender(s,'sale1','oops'))
+ assert(R.stageTender(s,'sale1',{[500]=1})); assert(C.total(s)==cash,'tender remains staged'); assert(not R.commit(s,'sale1',{[100]=2}),'short change correctable')
+ assert(not R.commit(s,'sale1',{[50000]=1}),'denomination shortage'); assert(R.commit(s,'sale1',{[100]=3})); assert(C.total(s)==cash+200 and I.available(s,'candy')==28)
+ assert(s.ledger.retailRevenue==200 and s.ledger.costOfGoods==160); local report=E.report(s); assert(report.profit==40 and report.cashFlow==200)
+ assert(R.begin(s,'sale2')); assert(R.add(s,'sale2','candy',1)); assert(R.commit(s,'sale1',{[100]=3})); assert(I.available(s,'candy')==27 and C.total(s)==cash+200,'old repeated commit cannot touch new basket'); assert(R.cancel(s,'sale2')); assert(I.available(s,'candy')==28)
+ assert(R.begin(s,'sale3')); assert(R.add(s,'sale3','candy',1)); assert(R.stageTender(s,'sale3',{[1000]=1})); assert(R.commit(s,'sale3',{[100]=2})); assert(s.ledger.changeLosses==100 and s.ledger.cashFlow==1000)
+ assert(R.begin(s,'cancel')); assert(R.add(s,'cancel','candy',1)); assert(R.stageTender(s,'cancel',{[100000]=1})); local before=C.total(s); assert(R.cancel(s,'cancel')); assert(C.total(s)==before and I.available(s,'candy')==27)
+ s=S.new(3); local start=C.total(s); assert(not I.purchase(s,'candy',-1,{})); assert(not I.purchase(s,'candy',1,{[100]=1}),'payment must match supplier'); assert(C.total(s)==start)
+ assert(I.purchase(s,'candy',5,{[100]=4})); assert(I.available(s,'candy')==35 and C.total(s)==start-400 and s.ledger.cashFlow==-400 and s.ledger.costOfGoods==0)
+ s.phase='service'; assert(not I.purchase(s,'candy',5,{[100]=4})); assert(P.adjust(s,999)); assert(s.reputation==100); assert(P.adjust(s,-999)); assert(s.reputation==0)
+ s=S.new(4); s.day=6; assert(I.purchase(s,'candy',5,{[100]=4,[500]=0})==nil,'supplier increase changes cost'); assert(C.total(s)==C.total(baseline))
+ assert(C.canPay(s,{[100]=20})); assert(not C.canPay(s,{[100]=21})); assert(not C.canPay(s,{[200]=1})); assert(not C.canPay(s,{[100]=-1}))
+ for n=1,205 do assert(Cmd.execute(s,'setPrice','candy',n)) end; assert(#s.commandHistory==200 and s.commandHistory[1].args[2]==6)
+ assert(not Cmd.execute(s,'missing')); assert(#s.commandHistory==200)
+ local V=require('src.model.validate')
+ local over=S.new(6); over.phase='service'; over.ledger.retailRevenue=9007199254740900
+ assert(V.nonnegative(over.ledger.retailRevenue)); assert(R.begin(over,'overflow')); assert(R.add(over,'overflow','candy',1)); assert(R.stageTender(over,'overflow',{[100]=1}))
+ local frozen=S.clone(over); local result,message=R.commit(over,'overflow',{})
+ assert(result==nil and type(message)=='string','ledger overflow must reject atomically')
+ assert(over.ledger.retailRevenue==frozen.ledger.retailRevenue and C.total(over)==C.total(frozen) and I.available(over,'candy')==I.available(frozen,'candy') and #over.histories.retail==0 and not over.completedReferences.overflow and over.retail.tenderAmount==100)
+ local purchase=S.new(7); purchase.ledger.cashFlow=-9007199254740900; local originalCash=C.total(purchase); local originalStock=I.available(purchase,'candy'); local originalId=purchase.ids.nextBatch
+ local bought,why=I.purchase(purchase,'candy',5,{[100]=4}); assert(bought==nil and type(why)=='string','purchase cashflow overflow must reject atomically')
+ assert(C.total(purchase)==originalCash and I.available(purchase,'candy')==originalStock and purchase.ids.nextBatch==originalId and purchase.ledger.cashFlow==-9007199254740900)
+ local drawer=S.new(8); drawer.phase='service'; drawer.drawer={[100]=90071992547409}; assert(V.nonnegative(C.total(drawer)))
+ assert(R.begin(drawer,'drawerOverflow')); assert(R.add(drawer,'drawerOverflow','candy',1)); assert(R.stageTender(drawer,'drawerOverflow',{[100]=1}))
+ local drawerResult=R.commit(drawer,'drawerOverflow',{}); assert(drawerResult==nil,'drawer aggregate overflow must reject'); assert(drawer.drawer[100]==90071992547409 and #drawer.histories.retail==0)
+ local empty=S.new(5); for id in pairs(empty.inventory) do empty.inventory[id]={} end; for d in pairs(empty.drawer) do empty.drawer[d]=0 end; empty.wallet.balance=0; assert(E.needsRecovery(empty)); empty.wallet.balance=100; assert(E.needsRecovery(empty)); empty.wallet.balance=10000; assert(not E.needsRecovery(empty))
+end
+
+

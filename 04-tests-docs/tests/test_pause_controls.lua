@@ -1,0 +1,16 @@
+return function()
+ local App=require('src.app'); local Save=require('src.persistence.save')
+ local a=App.new(Save.new(require('tests.support.memory_disk').new(),'pause-settings'))
+ a:keypressed('escape'); assert(a.state.paused,'Escape must pause at Title too')
+ assert(a:layerDepth()==2)
+ a:keypressed('escape'); assert(not a.state.paused and a:layerDepth()==1)
+ assert(a:navigate('pause') and a.state.paused,'Shared pause descriptor must open Title pause')
+ assert(a:navigate('resume') and not a.state.paused,'Shared resume descriptor must close pause')
+ a:newRun(); assert(a:setSetting('volume',.2)); assert(a:setSetting('difficulty','easy'))
+ assert(a:setSetting('reducedMotion',true)); assert(a:setSetting('textScale',1.15))
+ assert(not a:setSetting('volume',-1)); assert(not a:setSetting('difficulty','unknown'))
+ assert(a:save()); assert(a:setSetting('volume',.8)); assert(a:load())
+ assert(a.state.settings.volume==.2 and a.state.settings.difficulty=='easy' and a.state.settings.reducedMotion and a.state.settings.textScale==1.15,'Settings must persist through the real save codec')
+ for i=1,100 do a:go('counter'); a:go('shelves') end
+ assert(a:layerDepth()==1,'Replacing stations cannot grow stack depth')
+end

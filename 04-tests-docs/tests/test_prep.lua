@@ -1,0 +1,57 @@
+-- Purpose: preparation payment/quote regression. API: suite() -> assertions. Dependencies: real domain modules.
+return function()
+    local State = require('src.model.state')
+    local Cash = require('src.systems.cash')
+    local Inventory = require('src.systems.inventory')
+    local Commands = require('src.commands')
+    local Days = require('src.systems.days')
+    assert(type(Cash.plan) == 'function', 'exact denomination planner must exist')
+    local state = State.new(3)
+    for denomination in pairs(state.drawer) do state.drawer[denomination] = 0 end
+    state.drawer[5000], state.drawer[2000] = 1, 3
+    local plan = assert(Cash.plan(state, 6000))
+    assert(plan[2000] == 3 and not plan[5000], 'planner must backtrack past unavailable change')
+    assert(Cash.value(plan) == 6000 and state.drawer[2000] == 3, 'planning is nonmutating')
+    state.drawer[2000] = 1
+    assert(not Cash.plan(state, 6000), 'insufficient denomination combination rejected')
+    assert(not Cash.plan(state, 6001) and not Cash.plan(state, 0.5), 'unpayable centavos and fractional currency rejected')
+    local zero = assert(Cash.plan(state, 0)); assert(next(zero) == nil)
+    local available = assert(Cash.available(state, {[1000] = 1}))
+    available[1000] = 9
+    assert(state.drawer[1000] == 0, 'available query returns independent counts')
+    local incomingPlan = assert(Cash.plan(state, 1000, {[1000] = 1}))
+    assert(incomingPlan[1000] == 1 and state.drawer[1000] == 0)
+    assert(not Cash.available(state, {[1000] = -1}))
+    state = State.new(3)
+    local quote = assert(Inventory.purchaseQuote(state, 'candy', 5))
+    assert(quote.cost == 400 and quote.quantity == 5 and quote.productId == 'candy')
+    quote.cost = 0
+    assert(Inventory.purchaseQuote(state, 'candy', 5).cost == 400, 'quotes are independent')
+    assert(not Inventory.purchaseQuote(state, 'missing', 5))
+    assert(not Inventory.purchaseQuote(state, 'candy', 0))
+    local before = Cash.total(state)
+    assert(Commands.execute(state, 'purchasePlanned', 'candy', 5))
+    assert(Cash.total(state) == before - 400 and Inventory.available(state, 'candy') == 35)
+    assert(state.ledger.cashFlow == -400 and state.ledger.costOfGoods == 0)
+    before = Cash.total(state)
+    assert(not Commands.execute(state, 'purchasePlanned', 'candy', 1))
+    assert(Cash.total(state) == before and Inventory.available(state, 'candy') == 35, 'failed payment leaves economic state unchanged')
+    assert(Commands.execute(state, 'stepPrice', 'candy', 100) and state.prices.candy == 200)
+    assert(not Commands.execute(state, 'stepPrice', 'candy', -200) and state.prices.candy == 200)
+    state.phase = 'service'
+    assert(not Commands.execute(state, 'stepPrice', 'candy', 100))
+    state.phase = 'preparation'; state.day = 6
+    assert(Days.prepare(state))
+    assert(Inventory.purchaseQuote(state, 'candy', 5).cost == 400, 'MVP endless ignores dormant legacy supplier increase')
+    state = State.new(1); assert(Days.prepare(state)); assert(Days.open(state))
+    local customer = state.queue[1]; customer.lines={{productId='candy',quantity=1,amount=100,measured=false}}; customer.total=100; customer.tender={[1000]=1}
+    assert(Commands.execute(state, 'beginRetail', customer.id))
+    assert(Commands.execute(state, 'addRetail', customer.id, 'candy', 1))
+    assert(Inventory.available(state, 'candy') == 29)
+    assert(Commands.execute(state, 'stageTender', customer.id, customer.tender))
+    local drawerBefore = Cash.total(state)
+    assert(Commands.execute(state, 'cancelCurrentCustomer', customer.id), 'explicit cancellation dismisses current customer')
+    assert(not state.retail and #state.queue == 0 and state.serviceOutcomes.timedOut == 1)
+    assert(Cash.total(state) == drawerBefore and Inventory.available(state, 'candy') == 30, 'cancelled tender and reservations return intact')
+    assert(not Commands.execute(state, 'cancelCurrentCustomer', customer.id), 'repeated cancellation cannot dismiss another customer')
+end
