@@ -1,0 +1,30 @@
+-- Purpose: original identifiable product/ingredient pictures cached at actual density. API: draw(product,x,y,w,h),clear(). Dependencies: theme/outline/shapes/color/layout/LÖVE only.
+local T=require('src.ui.theme'); local O=require('src.ui.draw.outline'); local S=require('src.ui.draw.shapes'); local C=require('src.ui.color'); local L=require('src.ui.layout'); local H={}; local cache={}; local currentDensity; local g=love.graphics
+local function fish(x,y,color) O.ellipse(x,y,14,7,color,.8); O.polygon({x-11,y,x-21,y-8,x-21,y+8},color,.8); g.setColor(T.ink); g.circle('fill',x+7,y-2,1.3) end
+local function bean(x,y,color) O.ellipse(x,y,6,9,color,.7); O.line({x-1,y-6,x+2,y,x-1,y+6},C.shade(color),.7) end
+local function packet(color) O.polygon({15,9,64,9,69,70,11,70},color,.9); O.line({17,14,61,14},C.shade(color),1); O.line({14,64,64,64},C.shade(color),1) end
+local function wave(x,y,w,color) O.line({x,y,x+w*.2,y-4,x+w*.4,y+3,x+w*.6,y-3,x+w*.8,y+3,x+w,y},color,1.5) end
+local function render(p) local id=p.id; local section=p.cabinet.section
+ if section==1 and id~='cooking_oil' then O.rect(5,8,70,64,T.bininner,3); local base=id=='mongo_beans' and T.sage or id=='rice_premium' and T.mustard or T.paper; O.ellipse(40,50,34,19,base,.7); for i=1,53 do local px=10+(i*37%59); local py=29+(i*23%38); local tone=i%3==0 and C.shade(base) or i%3==1 and base or T.paper; if id=='sugar' then O.rect(px,py,5,5,tone,.3,.4) elseif id=='mongo_beans' then O.ellipse(px,py,3,4,tone,.5) elseif id=='flour' or id=='salt' then g.setColor(tone); g.circle('fill',px,py,id=='salt' and 1.4 or 2.3) else O.ellipse(px,py,3.2,1.5,tone,.5) end end
+ elseif id=='cooking_oil' then S.bottle(20,3,39,70,T.mustard); O.ellipse(40,49,8,10,T.paper,.8)
+ elseif id=='pancit_canton' then packet(T.sage); for y=30,49,6 do wave(22,y,36,T.mustard) end
+ elseif id=='soup_noodles' then packet(T.mustard); S.bowl(22,30,35,19,T.paper); wave(24,31,32,T.dustyrose)
+ elseif section==2 then local canColor=id=='tuna' and T.teal or id=='corned_beef' and T.dustyrose or id=='meat_loaf' and T.wood or id=='canned_beans' and T.sage or T.maroon; S.can(16,12,49,56,canColor); O.rect(16,29,49,25,T.paper,2,.8); if id=='sardines' or id=='tuna' then fish(43,41,id=='tuna' and T.teal or T.maroon) elseif id=='corned_beef' then O.polygon({28,33,47,33,56,45,45,49,27,44},T.dustyrose,.8) elseif id=='meat_loaf' then O.rect(25,34,31,15,T.wood,4,.8) else for i=1,5 do bean(25+i*5,37+i%2*8,T.maroon) end end
+ elseif id=='candy' then O.polygon({26,33,10,24,12,51,27,44},T.blush); O.polygon({52,33,69,24,67,51,52,44},T.blush); O.rect(25,28,30,23,T.dustyrose,10)
+ elseif id=='chewing_gum' then O.rect(14,22,54,35,T.teal,4); O.rect(24,24,13,31,T.paper,2); O.line({42,32,61,32},T.paper,2); O.line({42,43,61,43},T.paper,2)
+ elseif id=='crackers' then for i=0,2 do O.rect(20+i*3,18+i*10,37,28,T.mustard,3); for dot=1,6 do g.setColor(T.wood); g.circle('fill',25+i*3+dot%3*10,24+i*10+math.floor(dot/3)*9,1.4) end end
+ elseif id=='biscuits' then for i=0,2 do O.ellipse(31+i*10,35+i*7,19,17,T.wood); for dot=0,4 do g.setColor(T.ink); g.circle('fill',31+i*10+math.cos(dot*1.3)*10,35+i*7+math.sin(dot*1.3)*8,1.4) end end
+ elseif id=='chips' then packet(T.mustard); for i=0,3 do local x=25+i*8; O.polygon({x,30+i%2*9,x+12,45+i%2*9,x-6,45+i%2*9},T.paper,.8) end
+ elseif id=='peanuts' then for i=0,5 do local x=24+i%3*14; local y=25+math.floor(i/3)*23; O.ellipse(x,y,7,11,T.wood,.8); O.line({x,y-9,x,y+9},T.paper,.8) end
+ elseif id=='bottled_water' or id=='cola' or id=='orange_soda' then S.bottle(22,3,36,70,id=='cola' and T.maroon or id=='orange_soda' and T.mustard or T.sky); if id=='bottled_water' then wave(28,46,23,T.teal) elseif id=='orange_soda' then O.ellipse(40,48,7,7,T.mustard,.8) else O.line({28,50,52,41},T.dustyrose,2) end
+ elseif section==4 then packet(id=='powdered_juice' and T.mustard or id=='powdered_milk' and T.sky or T.wood); O.ellipse(40,40,16,16,T.paper,.8); if id=='powdered_juice' then O.ellipse(40,41,9,10,T.mustard,.8); O.ellipse(47,28,7,3,T.sage,.7) elseif id=='powdered_milk' then O.polygon({40,27,48,43,45,50,35,50,32,43},T.sky,.8) else bean(38,40,T.ink); if id=='coffee_mix' then O.ellipse(46,46,6,7,T.cream,.7) end end
+ elseif id=='bath_soap' then O.rect(12,22,58,37,T.blush,14); O.ellipse(42,40,19,9,T.paper,.8)
+ elseif id=='toothpaste' then O.polygon({23,13,53,17,60,64,14,58},T.paper); O.rect(21,8,25,10,T.teal,2); O.line({23,32,48,37},T.dustyrose,5)
+ elseif section==5 then packet(id=='shampoo' and T.dustyrose or id=='conditioner' and T.sage or id=='detergent' and T.sky or T.teal); if id=='detergent' then O.polygon({29,30,35,33,45,33,51,30,59,40,51,44,51,54,29,54,29,44,21,40},T.paper,.8) elseif id=='conditioner' then O.ellipse(40,42,10,18,T.paper,.8); O.line({40,26,40,58},T.teal,1) elseif id=='dishwashing' then O.ellipse(40,45,17,12,T.paper,.8); O.ellipse(40,44,11,7,T.teal,.8) else O.polygon({40,26,49,43,47,53,39,57,31,51,31,43},T.paper,.8) end
+ elseif id=='eggs' then for i=0,2 do O.ellipse(21+i*18,39+i%2*7,10,15,T.paper,.9) end
+ elseif id=='candles' then O.rect(27,27,24,42,T.paper,3); O.line({39,19,39,28},T.ink,1); O.ellipse(39,14,5,10,T.mustard,.7)
+ elseif id=='matches' then O.rect(10,22,60,39,T.maroon,3); O.rect(18,28,44,26,T.wood,2); for i=0,2 do O.line({27+i*10,33,22+i*10,48},T.paper,2); O.ellipse(27+i*10,33,2,2,T.dustyrose,.6) end end
+end
+function H.draw(p,x,y,w,h) w=w or 80; h=h or w; local base=L.scale*love.window.getDPIScale(); local densityKey=string.format('%.3f',base); if currentDensity~=densityKey then cache={}; currentDensity=densityKey end; local density=base; local key=p.id..':'..densityKey; local canvas=cache[key]; if not canvas then canvas=g.newCanvas(math.ceil(80*density),math.ceil(80*density)); local previous=g.getCanvas(); g.push('all'); g.setCanvas(canvas); g.origin(); g.setScissor(); g.clear(0,0,0,0); g.scale(density); render(p); g.setCanvas(previous); g.pop(); cache[key]=canvas end; g.push('all'); g.setBlendMode('alpha','premultiplied'); g.setColor(1,1,1,1); g.draw(canvas,x,y,0,w/80/density,h/80/density); g.pop() end
+function H.clear() cache={}; currentDensity=nil end
+return H
